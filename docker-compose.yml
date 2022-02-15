@@ -1,0 +1,50 @@
+version: '3'
+
+services:
+
+  worker: &worker
+    build: .
+    volumes:
+      - ./media:/media
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    environment:
+      # Django settings overrides:
+      - ALLOWED_HOSTS=*
+      - DEBUG=True
+      - DATABASE_URL=postgres://product_catalog:product_catalog@db:5432/product_catalog
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=local
+
+    command: celery -A product_catalog worker -l info
+
+  web:
+    <<: *worker
+    command: >
+      bash -c "./manage.py migrate &&
+               ./manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+
+  db:
+    image: postgres:14.1
+    environment:
+      - POSTGRES_USER=product_catalog
+      - POSTGRES_PASSWORD=product_catalog
+      - POSTGRES_DB=product_catalog
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - db:/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U product_catalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+
+volumes:
+    db:
